@@ -1,4 +1,4 @@
-field.field.*.*.*.third_party.unique:
+field.field.*.*.*.third_party.unique_field_ajax:
   type: mapping
   label: Unique field third party settings
   mapping:
@@ -14,3 +14,10 @@ field.field.*.*.*.third_party.unique:
     message:
       type: textarea
       label: Use ajax
+node.type.*.third_party.unique_field_ajax:
+  type: mapping
+  label: 'Unique field node third party settings'
+  mapping:
+    unique_title:
+      type: boolean
+      label: 'Set if node requires unique titles'

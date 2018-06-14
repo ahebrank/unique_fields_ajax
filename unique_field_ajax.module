@@ -9,6 +9,8 @@ use Drupal\Component\Utility\NestedArray;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\field\Entity\FieldConfig;
+use Drupal\Core\Field\BaseFieldDefinition;
+use Drupal\Core\Entity\EntityInterface;
 
 /**
  * Implements hook_help().
@@ -101,6 +103,61 @@ function unique_field_ajax_form_field_config_edit_form_alter(&$form, FormStateIn
 }
 
 /**
+ * Alter forms to add unique title checkbox
+ *   - node type add/edit
+ *
+ * @param [type] $form
+ * @param FormStateInterface $form_state
+ * @param [type] $form_id
+ * @return void
+ */
+function unique_field_ajax_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+  if (_unique_field_ajax_is_config_form($form_id)) {
+    $entity = $form_state->getFormObject()->getEntity();
+    $form['third_party_settings']['unique_field_ajax']['unique_title'] = array(
+      '#type' => 'checkbox',
+      '#title' => t("Enforce unique title"),
+      '#default_value' => $entity->getThirdPartySetting('unique_field_ajax', 'unique_title'),
+      '#weight' => -10,
+    );
+
+    $form['#entity_builders'][] = '_unique_field_ajax_entity_form_builder';
+  }
+}
+
+/**
+ * Determine if this is a form for titleable entity config
+ *
+ * @param string $form_id
+ * @return bool
+ */
+function _unique_field_ajax_is_config_form($form_id) {
+  // TODO: can this be generalized?
+  $entity_config_forms = [
+    'node_type_edit_form', 'node_type_add_form',
+  ];
+  return in_array($form_id, $entity_config_forms);
+}
+
+/**
+ * Save the third-party setting
+ *
+ * @param [type] $entity_type
+ * @param EntityInterface $entity
+ * @param [type] $form
+ * @param FormStateInterface $form_state
+ * @return void
+ */
+function _unique_field_ajax_entity_form_builder($entity_type, EntityInterface $entity, &$form, FormStateInterface $form_state) {
+  if ($form_state->getValue('unique_title')) {
+    $entity->setThirdPartySetting('unique_field_ajax', 'unique_title', $form_state->getValue('unique_title'));
+    return;
+  }
+  // otherwise clear the setting
+  $entity->unsetThirdPartySetting('unique_field_ajax', 'unique_title');
+}
+
+/**
  * Attaching data to unique fields.
  *
  * @param $element
@@ -119,20 +176,49 @@ function unique_field_ajax_field_widget_form_alter(&$element, FormStateInterface
     ) {
       $is_unique_per_lang = $field_definition->getThirdPartySetting('unique_field_ajax', 'per_lang');
     }
+    $label = $field_definition->label();
+    $message = $field_definition->getThirdPartySetting('unique_field_ajax', 'message');
     if ($field_definition->getThirdPartySetting('unique_field_ajax', 'unique')) {
+      _unique_field_ajax_inject_validation($element, $is_unique_per_lang, $name, $label, $message);
+    }
+  }
 
-      $element['value']['#unique_field_ajax_settings'] = [
-        'per_lang' => $is_unique_per_lang,
-        'field_definition' => $field_definition,
-        'field_name' => $name,
-      ];
-
-      $element['value']['#element_validate'][] = 'unique_field_ajax_validate_unique';
-      if ($field_definition->getThirdPartySetting('unique_field_ajax', 'use_ajax')) {
-        $element['#process'] = ['_unique_field_ajax_process'];
+  // check if this is the title (base field label) and if the parent entity enforces unique titles
+  if ($field_definition instanceof BaseFieldDefinition) {
+    $entity = $form_state->getFormObject()->getEntity();
+    $entity_type = $entity->getEntityType();
+    if ($entity_type->hasKey('label')) {
+      if ($entity_type->getKey('label') == $name) {
+        $bundle_def_id = $entity->getEntityType()->getBundleEntityType();
+        $bundle_def = \Drupal::service('entity_type.manager')->getStorage($bundle_def_id)->load($entity->bundle());
+        if ($bundle_def->getThirdPartySetting('unique_field_ajax', 'unique_title')) {
+          _unique_field_ajax_inject_validation($element, $is_unique_per_lang, $name, $name, t('Title must be unique.'));
+        }
       }
     }
   }
+}
+
+/**
+ * Place the validators on the element.
+ *
+ * @param array $element
+ * @param bool $is_unique_per_lang
+ * @param string $name
+ * @param string $label
+ * @param string $message
+ * @return void
+ */
+function _unique_field_ajax_inject_validation(&$element, $is_unique_per_lang, $name, $label, $message) {
+  $element['value']['#unique_field_ajax_settings'] = [
+    'per_lang' => $is_unique_per_lang,
+    'field_name' => $name,
+    'field_label' => $label,
+    'message' => $message,
+  ];
+
+  $element['value']['#element_validate'][] = 'unique_field_ajax_validate_unique';
+  $element['#process'] = ['_unique_field_ajax_process'];
 }
 
 /**
@@ -159,8 +245,8 @@ function _unique_field_ajax(array &$form, FormStateInterface $form_state) {
  */
 function _unique_field_ajax_process($element, FormStateInterface &$form_state, &$form) {
   $field_name = $element['value']['#unique_field_ajax_settings']['field_name'];
-  $field_definition = $element['value']['#unique_field_ajax_settings']['field_definition'];
-  $field_label = $field_definition->label();
+  $field_label = $element['value']['#unique_field_ajax_settings']['field_label'];
+  $message = $element['value']['#unique_field_ajax_settings']['message'];
   $wrapper = 'unique-' . $field_name;
   if(!empty($form['#attached']['library']) && !in_array('unique_field_ajax/unique_event',$form['#attached']['library'])){
     $form['#attached']['library'][] = 'unique_field_ajax/unique_event';
@@ -186,7 +272,6 @@ function _unique_field_ajax_process($element, FormStateInterface &$form_state, &
   $langcode = (!empty($form_state->getValues()['langcode'][0]['value'])) ?
     $form_state->getValues()['langcode'][0]['value'] : '0';
   $valid = unique_field_ajax_is_unique($entity_type, $langcode, $field_name, $value, $entity->bundle(), $element['value']['#unique_field_ajax_settings']['per_lang'], $entity);
-  $message = $field_definition->getThirdPartySetting('unique_field_ajax', 'message');
   if (empty($message)) {
     $message = t('This field has to be unique.');
   }
@@ -211,7 +296,7 @@ function unique_field_ajax_validate_unique($element, FormStateInterface $form_st
 
   $field_name = $element['#unique_field_ajax_settings']['field_name'];
   $field_definition = $element['#unique_field_ajax_settings']['field_definition'];
-  $field_label = $field_definition->label();
+  $field_label = $element['#unique_field_ajax_settings']['field_label'];
   $value = $form_state->getValue($field_name);
   $entity_type = $entity->getEntityTypeId();
 
