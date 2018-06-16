@@ -114,12 +114,55 @@ function unique_field_ajax_form_field_config_edit_form_alter(&$form, FormStateIn
 function unique_field_ajax_form_alter(&$form, FormStateInterface $form_state, $form_id) {
   if (_unique_field_ajax_is_config_form($form_id)) {
     $entity = $form_state->getFormObject()->getEntity();
-    $form['third_party_settings']['unique_field_ajax']['unique_title'] = array(
+    $form['unique_field_ajax'] = array(
+      '#type' => 'details',
+      '#group' => 'additional_settings',
+      '#title' => t('Unique title settings'),
+    );
+    $form['unique_field_ajax']['unique_field_ajax_unique_title'] = array(
       '#type' => 'checkbox',
       '#title' => t("Enforce unique title"),
       '#default_value' => $entity->getThirdPartySetting('unique_field_ajax', 'unique_title'),
+      '#description' => t('Validate that nodes within this bundle do not have duplicate titles'),
       '#weight' => -10,
     );
+    $form['unique_field_ajax']['unique_field_ajax_per_lang'] = array(
+      '#type' => 'checkbox',
+      '#title' => t("Per Language"),
+      '#description' => t("Do not allow duplicated content per language"),
+      '#default_value' => $entity->getThirdPartySetting('unique_field_ajax', 'per_lang'),
+      '#weight' => -9,
+      '#states' => array(
+        'visible' => array(
+          ':input[name="unique_field_ajax_unique_title"]' => array('checked' => TRUE)
+        ),
+      ),
+    );
+    $form['unique_field_ajax']['unique_field_ajax_use_ajax'] = array(
+      '#type' => 'checkbox',
+      '#title' => t("Use Ajax"),
+      '#description' => t("Use ajax for validation."),
+      '#default_value' => $entity->getThirdPartySetting('unique_field_ajax', 'use_ajax'),
+      '#weight' => -8,
+      '#states' => array(
+        'visible' => array(
+          ':input[name="unique_field_ajax_unique_title"]' => array('checked' => TRUE)
+        ),
+      ),
+    );
+    $form['unique_field_ajax']['unique_field_ajax_message'] = array(
+      '#type' => 'textarea',
+      '#title' => t("Error message"),
+      '#description' => t("The message to show under the field when the value is not unique"),
+      '#default_value' => $entity->getThirdPartySetting('unique_field_ajax', 'message'),
+      '#weight' => -7,
+      '#states' => array(
+        'visible' => array(
+          ':input[name="unique_field_ajax_unique_title"]' => array('checked' => TRUE)
+        ),
+      ),
+    );
+
 
     $form['#entity_builders'][] = '_unique_field_ajax_entity_form_builder';
   }
@@ -149,12 +192,28 @@ function _unique_field_ajax_is_config_form($form_id) {
  * @return void
  */
 function _unique_field_ajax_entity_form_builder($entity_type, EntityInterface $entity, &$form, FormStateInterface $form_state) {
-  if ($form_state->getValue('unique_title')) {
-    $entity->setThirdPartySetting('unique_field_ajax', 'unique_title', $form_state->getValue('unique_title'));
-    return;
+  if ($form_state->getValue('unique_field_ajax_unique_title')) {
+    $entity->setThirdPartySetting('unique_field_ajax', 'unique_title', $form_state->getValue('unique_field_ajax_unique_title'));
   }
-  // otherwise clear the setting
-  $entity->unsetThirdPartySetting('unique_field_ajax', 'unique_title');
+  else {
+    $entity->unsetThirdPartySetting('unique_field_ajax', 'unique_title');
+  }
+
+  if ($form_state->getValue('unique_field_ajax_per_lang')) {
+    $entity->setThirdPartySetting('unique_field_ajax', 'per_lang', $form_state->getValue('unique_field_ajax_per_lang'));
+  }
+  else {
+    $entity->unsetThirdPartySetting('unique_field_ajax', 'per_lang');
+  }
+
+  if ($form_state->getValue('unique_field_ajax_use_ajax')) {
+    $entity->setThirdPartySetting('unique_field_ajax', 'use_ajax', $form_state->getValue('unique_field_ajax_use_ajax'));
+  }
+  else {
+    $entity->unsetThirdPartySetting('unique_field_ajax', 'use_ajax');
+  }
+
+  $entity->setThirdPartySetting('unique_field_ajax', 'message', $form_state->getValue('unique_field_ajax_message'));
 }
 
 /**
@@ -167,19 +226,17 @@ function _unique_field_ajax_entity_form_builder($entity_type, EntityInterface $e
 function unique_field_ajax_field_widget_form_alter(&$element, FormStateInterface $form_state, $context) {
   $field_definition = $context['items']->getFieldDefinition();
   $name = $field_definition->getFieldStorageDefinition()->getName();
+  $is_unique_per_lang = NULL;
+
   if ($field_definition instanceof FieldConfig) {
-    $is_unique_per_lang = NULL;
-    if ((\Drupal::moduleHandler()
-        ->moduleExists('language')) && \Drupal::languageManager()
-        ->getCurrentLanguage()
-        ->getId()
-    ) {
-      $is_unique_per_lang = $field_definition->getThirdPartySetting('unique_field_ajax', 'per_lang');
-    }
     $label = $field_definition->label();
-    $message = $field_definition->getThirdPartySetting('unique_field_ajax', 'message');
     if ($field_definition->getThirdPartySetting('unique_field_ajax', 'unique')) {
-      _unique_field_ajax_inject_validation($element, $is_unique_per_lang, $name, $label, $message);
+      if (_unique_field_ajax_language_id_exists()) {
+        $is_unique_per_lang = $field_definition->getThirdPartySetting('unique_field_ajax', 'per_lang');
+      }
+      $message = $field_definition->getThirdPartySetting('unique_field_ajax', 'message');
+      $use_ajax = $field_definition->getThirdPartySetting('unique_field_ajax', 'use_ajax');
+      _unique_field_ajax_inject_validation($element, $is_unique_per_lang, $name, $label, $message, $use_ajax);
     }
   }
 
@@ -192,11 +249,28 @@ function unique_field_ajax_field_widget_form_alter(&$element, FormStateInterface
         $bundle_def_id = $entity->getEntityType()->getBundleEntityType();
         $bundle_def = \Drupal::service('entity_type.manager')->getStorage($bundle_def_id)->load($entity->bundle());
         if ($bundle_def->getThirdPartySetting('unique_field_ajax', 'unique_title')) {
-          _unique_field_ajax_inject_validation($element, $is_unique_per_lang, $name, $name, t('Title must be unique.'));
+          if (_unique_field_ajax_language_id_exists()) {
+            $is_unique_per_lang = $bundle_def->getThirdPartySetting('unique_field_ajax', 'per_lang');
+          }
+          $message = $bundle_def->getThirdPartySetting('unique_field_ajax', 'message');
+          $use_ajax = $bundle_def->getThirdPartySetting('unique_field_ajax', 'use_ajax');
+          _unique_field_ajax_inject_validation($element, $is_unique_per_lang, $name, $name, $message, $use_ajax);
         }
       }
     }
   }
+}
+
+/**
+ * return the current language ID if it exists
+ *
+ * @return string
+ */
+function _unique_field_ajax_language_id_exists() {
+  return (\Drupal::moduleHandler()->moduleExists('language')) 
+    && \Drupal::languageManager()
+        ->getCurrentLanguage()
+        ->getId();
 }
 
 /**
@@ -209,7 +283,7 @@ function unique_field_ajax_field_widget_form_alter(&$element, FormStateInterface
  * @param string $message
  * @return void
  */
-function _unique_field_ajax_inject_validation(&$element, $is_unique_per_lang, $name, $label, $message) {
+function _unique_field_ajax_inject_validation(&$element, $is_unique_per_lang, $name, $label, $message, $use_ajax) {
   $element['value']['#unique_field_ajax_settings'] = [
     'per_lang' => $is_unique_per_lang,
     'field_name' => $name,
@@ -218,7 +292,9 @@ function _unique_field_ajax_inject_validation(&$element, $is_unique_per_lang, $n
   ];
 
   $element['value']['#element_validate'][] = 'unique_field_ajax_validate_unique';
-  $element['#process'] = ['_unique_field_ajax_process'];
+  if ($use_ajax) {
+    $element['#process'] = ['_unique_field_ajax_process'];
+  }
 }
 
 /**

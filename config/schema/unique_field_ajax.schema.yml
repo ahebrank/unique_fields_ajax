@@ -3,17 +3,17 @@ field.field.*.*.*.third_party.unique_field_ajax:
   label: Unique field third party settings
   mapping:
     unique:
-      type: checkbox
+      type: boolean
       label: Set if field is unique or not
     per_lang:
-      type: checkbox
+      type: boolean
       label: Unique per language
     use_ajax:
-      type: checkbox
-      label: Use ajax
+      type: boolean
+      label: Use ajax validation
     message:
-      type: textarea
-      label: Use ajax
+      type: string
+      label: Validation error message
 node.type.*.third_party.unique_field_ajax:
   type: mapping
   label: 'Unique field node third party settings'
@@ -21,3 +21,12 @@ node.type.*.third_party.unique_field_ajax:
     unique_title:
       type: boolean
       label: 'Set if node requires unique titles'
+    per_lang:
+      type: boolean
+      label: Unique per language
+    use_ajax:
+      type: boolean
+      label: Use ajax validation
+    message:
+      type: string
+      label: Validation error message
