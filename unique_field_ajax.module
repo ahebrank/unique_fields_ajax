@@ -249,7 +249,7 @@ function unique_field_ajax_field_widget_form_alter(&$element, FormStateInterface
       $entity_type = $entity->getEntityType();
       if ($entity_type instanceof ContentEntityType && $entity_type->hasKey('label')) {
         if ($entity_type->getKey('label') == $name) {
-          $bundle_def_id = $entity->getEntityType()->getBundleEntityType();
+          $bundle_def_id = $entity_type->getBundleEntityType();
           if ($bundle_def_id) {
             $bundle_def = \Drupal::service('entity_type.manager')->getStorage($bundle_def_id)->load($entity->bundle());
             if ($bundle_def->getThirdPartySetting('unique_field_ajax', 'unique_title')) {
