@@ -11,6 +11,7 @@ use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\Core\Field\BaseFieldDefinition;
 use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Entity\ContentEntityType;
 
 /**
  * Implements hook_help().
@@ -242,19 +243,24 @@ function unique_field_ajax_field_widget_form_alter(&$element, FormStateInterface
 
   // check if this is the title (base field label) and if the parent entity enforces unique titles
   if ($field_definition instanceof BaseFieldDefinition) {
-    $entity = $form_state->getFormObject()->getEntity();
-    $entity_type = $entity->getEntityType();
-    if ($entity_type->hasKey('label')) {
-      if ($entity_type->getKey('label') == $name) {
-        $bundle_def_id = $entity->getEntityType()->getBundleEntityType();
-        $bundle_def = \Drupal::service('entity_type.manager')->getStorage($bundle_def_id)->load($entity->bundle());
-        if ($bundle_def->getThirdPartySetting('unique_field_ajax', 'unique_title')) {
-          if (_unique_field_ajax_language_id_exists()) {
-            $is_unique_per_lang = $bundle_def->getThirdPartySetting('unique_field_ajax', 'per_lang');
+    $form_object = $form_state->getFormObject();
+    if (method_exists($form_object, 'getEntity')) {
+      $entity = $form_object->getEntity();
+      $entity_type = $entity->getEntityType();
+      if ($entity_type instanceof ContentEntityType && $entity_type->hasKey('label')) {
+        if ($entity_type->getKey('label') == $name) {
+          $bundle_def_id = $entity->getEntityType()->getBundleEntityType();
+          if ($bundle_def_id) {
+            $bundle_def = \Drupal::service('entity_type.manager')->getStorage($bundle_def_id)->load($entity->bundle());
+            if ($bundle_def->getThirdPartySetting('unique_field_ajax', 'unique_title')) {
+              if (_unique_field_ajax_language_id_exists()) {
+                $is_unique_per_lang = $bundle_def->getThirdPartySetting('unique_field_ajax', 'per_lang');
+              }
+              $message = $bundle_def->getThirdPartySetting('unique_field_ajax', 'message');
+              $use_ajax = $bundle_def->getThirdPartySetting('unique_field_ajax', 'use_ajax');
+              _unique_field_ajax_inject_validation($element, $is_unique_per_lang, $name, $name, $message, $use_ajax);
+            }
           }
-          $message = $bundle_def->getThirdPartySetting('unique_field_ajax', 'message');
-          $use_ajax = $bundle_def->getThirdPartySetting('unique_field_ajax', 'use_ajax');
-          _unique_field_ajax_inject_validation($element, $is_unique_per_lang, $name, $name, $message, $use_ajax);
         }
       }
     }
