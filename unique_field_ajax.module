@@ -377,7 +377,6 @@ function unique_field_ajax_validate_unique($element, FormStateInterface $form_st
       $form_state->getValues()['langcode'][0]['value'] : '0';
 
   $field_name = $element['#unique_field_ajax_settings']['field_name'];
-  $field_definition = $element['#unique_field_ajax_settings']['field_definition'];
   $field_label = $element['#unique_field_ajax_settings']['field_label'];
   $value = $form_state->getValue($field_name);
   $entity_type = $entity->getEntityTypeId();
