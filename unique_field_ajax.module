@@ -245,7 +245,7 @@ function unique_field_ajax_field_widget_form_alter(&$element, FormStateInterface
   if ($field_definition instanceof BaseFieldDefinition) {
     $entity = null;
     // IEF support.
-    if (isset($context['form']) && $context['form']['#type'] == 'inline_entity_form') {
+    if (isset($context['form']) && isset($context['form']['#type']) && $context['form']['#type'] == 'inline_entity_form') {
       $entity = $context['form']['#default_value'];
     }
     else {
