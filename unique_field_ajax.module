@@ -260,14 +260,16 @@ function unique_field_ajax_field_widget_form_alter(&$element, FormStateInterface
         $entity_label = $entity_type->getKey('label');
         if ($entity_label == $name) {
           $bundle_def_id = $entity_type->getBundleEntityType();
-          $bundle_def = \Drupal::service('entity_type.manager')->getStorage($bundle_def_id)->load($entity->bundle());
-          if ($bundle_def->getThirdPartySetting('unique_field_ajax', 'unique_title')) {
-            if (_unique_field_ajax_language_id_exists()) {
-              $is_unique_per_lang = $bundle_def->getThirdPartySetting('unique_field_ajax', 'per_lang');
+          if ($bundle_def_id) {
+            $bundle_def = \Drupal::service('entity_type.manager')->getStorage($bundle_def_id)->load($entity->bundle());
+            if ($bundle_def->getThirdPartySetting('unique_field_ajax', 'unique_title')) {
+              if (_unique_field_ajax_language_id_exists()) {
+                $is_unique_per_lang = $bundle_def->getThirdPartySetting('unique_field_ajax', 'per_lang');
+              }
+              $message = $bundle_def->getThirdPartySetting('unique_field_ajax', 'message');
+              $use_ajax = $bundle_def->getThirdPartySetting('unique_field_ajax', 'use_ajax');
+              _unique_field_ajax_inject_validation($element, $is_unique_per_lang, $name, $name, $message, $use_ajax);
             }
-            $message = $bundle_def->getThirdPartySetting('unique_field_ajax', 'message');
-            $use_ajax = $bundle_def->getThirdPartySetting('unique_field_ajax', 'use_ajax');
-            _unique_field_ajax_inject_validation($element, $is_unique_per_lang, $name, $name, $message, $use_ajax);
           }
         }
       }
