@@ -10,6 +10,7 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\Core\Field\BaseFieldDefinition;
+use Drupal\Core\Field\Entity\BaseFieldOverride;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\ContentEntityType;
 
@@ -244,7 +245,7 @@ function unique_field_ajax_field_widget_form_alter(&$element, FormStateInterface
   }
 
   // Check if this is the title (base field label) and if the parent entity enforces unique titles.
-  if ($field_definition instanceof BaseFieldDefinition) {
+  if (($field_definition instanceof BaseFieldDefinition) || ($field_definition instanceof BaseFieldOverride)) {
     $entity = NULL;
     // IEF support.
     if (isset($context['form']) && isset($context['form']['#type']) && $context['form']['#type'] == 'inline_entity_form') {
